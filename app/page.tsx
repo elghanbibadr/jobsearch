@@ -1,69 +1,300 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState } from "react";
+
+type Priority = "medium" | "high";
+
+type Lead = {
+  id: string;
+  email: string;
+  company: string;
+  priority: Priority;
+  sent: string; // email 1 sent date
+  followUp: string; // follow up date
+};
+
+const STORAGE_KEY = "leads-tracker";
+
+function toDateInput(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDays(dateStr: string, days: number) {
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return toDateInput(new Date(y, m - 1, d + days));
+}
+
+export default function Page() {
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [email, setEmail] = useState("");
+  const [company, setCompany] = useState("");
+  const [priority, setPriority] = useState<Priority>("medium");
+  const [error, setError] = useState("");
+  const [filter, setFilter] = useState<"all" | "high">("all");
+
+  // load
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) setLeads(JSON.parse(raw));
+    } catch {}
+    setLoaded(true);
+  }, []);
+
+  // save
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(leads));
+    } catch {}
+  }, [leads, loaded]);
+
+  function addLead(e: React.FormEvent) {
+    e.preventDefault();
+    const clean = email.trim();
+    if (!clean) return;
+
+    const exists = leads.some(
+      (l) => l.email.trim().toLowerCase() === clean.toLowerCase()
+    );
+    if (exists) {
+      setError("This email already exists");
+      return;
+    }
+
+    const today = toDateInput(new Date());
+
+    setLeads([
+      {
+        id: crypto.randomUUID(),
+        email: clean,
+        company: company.trim(),
+        priority,
+        sent: today,
+        followUp: addDays(today, 5),
+      },
+      ...leads,
+    ]);
+    setEmail("");
+    setCompany("");
+    setPriority("medium");
+    setError("");
+  }
+
+  function update(id: string, patch: Partial<Lead>) {
+    setLeads(leads.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  }
+
+  function remove(id: string) {
+    setLeads(leads.filter((l) => l.id !== id));
+  }
+
+  const visible = filter === "high" ? leads.filter((l) => l.priority === "high") : leads;
+  const sentCount = leads.filter((l) => l.sent).length;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="wrap">
+      <style>{css}</style>
+
+      <header>
+        <h1>Applications tracker</h1>
+        <p className="stats">
+          {leads.length} leads · {sentCount} emailed ·{" "}
+          {leads.filter((l) => l.priority === "high").length} high priority
+        </p>
+      </header>
+
+      <form onSubmit={addLead} className="add">
+        <div className="field grow">
+          <input
+            type="text"
+            placeholder="Email or link"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (error) setError("");
+            }}
+            aria-invalid={!!error}
+          />
+          {error && <span className="error">{error}</span>}
+        </div>
+        <input
+          type="text"
+          placeholder="Company"
+          value={company}
+          onChange={(e) => setCompany(e.target.value)}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        <select
+          value={priority}
+          onChange={(e) => setPriority(e.target.value as Priority)}
+        >
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+        <button type="submit">Add lead</button>
+      </form>
+
+      <div className="tabs">
+        <button
+          className={filter === "all" ? "on" : ""}
+          onClick={() => setFilter("all")}
+        >
+          All
+        </button>
+        <button
+          className={filter === "high" ? "on" : ""}
+          onClick={() => setFilter("high")}
+        >
+          High priority
+        </button>
+      </div>
+
+      <div className="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Company</th>
+              <th>Priority</th>
+              <th>Email 1 sent</th>
+              <th>Follow up</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {visible.length === 0 && (
+              <tr>
+                <td colSpan={6} className="empty">
+                  No leads yet. Add your first email above.
+                </td>
+              </tr>
+            )}
+            {visible.map((l) => (
+              <tr key={l.id}>
+                <td className="mail">{l.email}</td>
+                <td>
+                  <input
+                    className="cell"
+                    value={l.company}
+                    placeholder="—"
+                    onChange={(e) => update(l.id, { company: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <select
+                    className={`pill ${l.priority}`}
+                    value={l.priority}
+                    onChange={(e) =>
+                      update(l.id, { priority: e.target.value as Priority })
+                    }
+                  >
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </td>
+                <td>
+                  <input
+                    className="cell"
+                    type="date"
+                    value={l.sent}
+                    onChange={(e) =>
+                      update(l.id, {
+                        sent: e.target.value,
+                        followUp: addDays(e.target.value, 5),
+                      })
+                    }
+                  />
+                </td>
+                <td>
+                  <input
+                    className="cell"
+                    type="date"
+                    value={l.followUp}
+                    onChange={(e) => update(l.id, { followUp: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <button
+                    className="del"
+                    onClick={() => remove(l.id)}
+                    aria-label={`Delete ${l.email}`}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </main>
   );
 }
+
+const css = `
+  :root {
+    --paper: #fbfaf8;
+    --ink: #1f2328;
+    --muted: #6b7075;
+    --line: #e5e2db;
+    --accent: #2c5f8a;
+    --high-bg: #fbe4de;
+    --high-ink: #9b3a24;
+    --med-bg: #eceae4;
+    --med-ink: #4b4f54;
+  }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 20px 80px; }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .stats { margin: 0 0 28px; color: var(--muted); font-size: 14px; }
+
+  .add { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 28px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .grow { flex: 1 1 260px; }
+  input, select, button { font: inherit; }
+  .add input, .add select {
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: #fff; color: var(--ink); min-width: 0;
+  }
+  .add input[aria-invalid="true"] { border-color: var(--high-ink); }
+  .add input:focus, .add select:focus, .cell:focus, .pill:focus-visible,
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .add button {
+    padding: 10px 16px; border: 0; border-radius: 8px; background: var(--ink);
+    color: #fff; cursor: pointer; font-weight: 600;
+  }
+  .add button:hover { background: #000; }
+  .error { color: var(--high-ink); font-size: 13px; font-weight: 600; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tabs button {
+    padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
+    background: transparent; color: var(--muted); cursor: pointer; font-size: 14px;
+  }
+  .tabs button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  table { width: 100%; border-collapse: collapse; min-width: 760px; }
+  th { text-align: left; font-size: 13px; font-weight: 600; color: var(--muted);
+    padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  td { padding: 6px 14px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  tr:last-child td { border-bottom: 0; }
+  .mail { font-weight: 500; word-break: break-all; }
+  .cell { border: 1px solid transparent; background: transparent; padding: 6px 8px;
+    border-radius: 6px; width: 100%; color: var(--ink); box-sizing: border-box; }
+  .cell:hover { border-color: var(--line); }
+  .pill { border: 0; border-radius: 999px; padding: 5px 10px; font-weight: 600;
+    font-size: 13px; cursor: pointer; }
+  .pill.high { background: var(--high-bg); color: var(--high-ink); }
+  .pill.medium { background: var(--med-bg); color: var(--med-ink); }
+  .del { border: 0; background: transparent; color: var(--muted); cursor: pointer;
+    font-size: 13px; padding: 6px 8px; border-radius: 6px; }
+  .del:hover { color: var(--high-ink); background: var(--high-bg); }
+  .empty { text-align: center; color: var(--muted); padding: 32px 14px; }
+`;
